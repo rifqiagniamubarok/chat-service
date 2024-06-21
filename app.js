@@ -17,11 +17,15 @@ const io = new Server(httpServer, {
 
 io.on('connection', (socket) => {
   let { id, handshake, rooms, data } = socket;
+  console.log(`New connection: ${id}`);
   socket.on('send_message', (data) => {
     io.to(data.room).emit('receive_message', data);
   });
   socket.on('join_room', (data) => {
     socket.join(data);
+  });
+  socket.on('disconnect', () => {
+    console.log(`Socket disconnected: ${id}`);
   });
 });
 

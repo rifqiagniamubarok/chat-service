@@ -1,13 +1,6 @@
-// This is your Prisma schema file,
-// learn more about it in the docs: https://pris.ly/d/prisma-schema
-
-// Looking for ways to speed up your queries, or scale easily with your serverless or edge functions?
-// Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
-
 generator client {
   provider = "prisma-client-js"
 }
-
 
 datasource db {
   provider = "mysql"
@@ -15,25 +8,40 @@ datasource db {
 }
 
 model User {
-  id          Int         @id @default(autoincrement()) @unique
-  name        String
-  email       String      @unique
-  password    String
-  chat        Chat[]
-  userRoom    RoomChat[]
+  id       Int        @id @unique @default(autoincrement())
+  name     String
+  email    String     @unique
+  password String
+  chat     Chat[]
+  userRoom UserRoom[]
 }
 
-model RoomChat {
-  id          Int         @id @default(autoincrement()) @unique
-  chat        Chat[]
-  userRoom    User[]
+model Room {
+  id       Int        @id @unique @default(autoincrement())
+  chat     Chat[]
+  userRoom UserRoom[]
+}
+
+model UserRoom {
+  id     Int  @id @unique @default(autoincrement())
+  userId Int
+  roomId Int
+  room   Room @relation(fields: [roomId], references: [id])
+  user   User @relation(fields: [userId], references: [id])
+
+  @@index([roomId], map: "UserRoom_roomId_fkey")
+  @@index([userId], map: "UserRoom_userId_fkey")
 }
 
 model Chat {
-  id          Int         @id @default(autoincrement()) @unique
-  message     String      @db.Text
-  senderId    Int     
-  sender      User        @relation(fields: [senderId], references: [id])
-  roomChatId  Int
-  roomChat    RoomChat    @relation(fields: [roomChatId], references: [id])
+  id       Int      @id @unique @default(autoincrement())
+  message  String   @db.Text
+  roomId   Int
+  datetime DateTime
+  userId   Int
+  room     Room     @relation(fields: [roomId], references: [id])
+  user     User     @relation(fields: [userId], references: [id])
+
+  @@index([roomId], map: "Chat_roomId_fkey")
+  @@index([userId], map: "Chat_userId_fkey")
 }

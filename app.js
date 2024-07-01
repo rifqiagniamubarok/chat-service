@@ -20,86 +20,98 @@ const io = new Server(httpServer, {
   },
 });
 
-const getRoom = async (userId, targetId) => {
-  const room = await prisma.userRoom.findMany({
-    where: {
-      AND: [
-        {
-          userId: Number(userId),
+const getChats = async (userId) => {
+  try {
+    const chats = await prisma.user.findUnique({
+      where: { id: userId },
+      include: {
+        userRoom: {
+          include: {
+            user: true,
+          },
         },
-        {
-          userId: Number(targetId),
+      },
+    });
+    const roomsId = chats.userRoom.map(({ roomId }) => {
+      return roomId;
+    });
+    const chatList = await prisma.userRoom.findMany({
+      where: {
+        roomId: {
+          in: roomsId,
         },
-      ],
-    },
-  });
-  return room;
+        userId: {
+          not: userId,
+        },
+      },
+      include: { user: true },
+    });
+    return chatList;
+  } catch (error) {
+    console.error({ error });
+  }
 };
-const createRoom = async (userId, targetId) => {
-  const room = await prisma.roomChat.createMany({
-    data: [{ userId: Number(userId) }, { userId: Number(targetId) }],
-  });
-  return room;
+
+const getPastMessage = async (roomId) => {
+  try {
+    const room = await prisma.room.findFirst({
+      where: {
+        id: Number(roomId),
+      },
+      include: {
+        chat: {
+          take: 20,
+          orderBy: {
+            datetime: 'desc',
+          },
+        },
+      },
+    });
+
+    const chatInOrder = room.chat.reverse();
+
+    return chatInOrder;
+  } catch (error) {
+    console.log({ error });
+  }
+};
+
+const saveMessage = async (data) => {
+  try {
+    const payload = {
+      message: data.message,
+      userId: Number(data.userId),
+      roomId: Number(data.room),
+      datetime: data.date,
+    };
+    await prisma.chat.create({
+      data: payload,
+    });
+  } catch (error) {
+    console.error({ error });
+  }
 };
 
 io.on('connection', (socket) => {
   let { id, handshake, rooms, data } = socket;
 
-  socket.on('send_message', (data) => {
+  socket.on('send_message', async (data) => {
+    await saveMessage(data);
     io.to(data.room).emit('receive_message', data);
   });
-  socket.on('join_room', (data) => {
+  socket.on('join_room', async (data) => {
     socket.join(data);
+
+    const pastMessages = await getPastMessage(data);
+    socket.emit('past_messages', pastMessages);
   });
   socket.on('ask_users', async (data) => {
-    try {
-      const users = await prisma.user.findMany({
-        where: {
-          id: {
-            not: Number(data.userId),
-          },
-        },
-      });
-      io.emit('receive_users', { users });
-    } catch (error) {
-      console.log({ error });
-    }
+    const userId = Number(data.userId);
+    const rooms = await getChats(userId);
+    socket.emit('receive_users', { rooms });
   });
-  socket.on('ask_room', async (data) => {
-    try {
-      if (data?.userId && data?.targetId) {
-        let { userId, targetId } = data;
-        const room = await getRoom(userId, targetId);
-        if (room.length !== 0) {
-          io.emit('receive_room', { isExist: true, room });
-          console.log({ room });
-          // socket.join(room.id);
-        } else {
-          io.emit('receive_room', { isExist: false });
-        }
-      }
-    } catch (error) {
-      console.log({ error });
-    }
-  });
-  socket.on('create_room_chat', async (data) => {
-    console.log('create room');
-    try {
-      if (data?.userId && data?.targetId) {
-        console.log('create room 2');
-        let { userId, targetId } = data;
-        const room = await getRoom(userId, targetId);
-        if (room.length == 0) {
-          console.log('create room 3');
-          const newRoom = await createRoom(userId, targetId);
-          console.log({ newRoom });
-          io.emit('receive_room', { isExist: true });
-        }
-      }
-    } catch (error) {
-      console.log({ error });
-    }
-  });
+  socket.on('ask_room', async (data) => {});
+  socket.on('create_room_chat', async (data) => {});
   socket.on('disconnect', () => {
     console.log(`Socket disconnected: ${id}`);
   });

@@ -22,31 +22,41 @@ const io = new Server(httpServer, {
 
 const getChats = async (userId) => {
   try {
-    const chats = await prisma.user.findUnique({
-      where: { id: userId },
+    const getRooms = await prisma.room.findMany({
+      where: {
+        userRoom: {
+          some: { userId },
+        },
+      },
       include: {
         userRoom: {
+          where: {
+            userId: {
+              not: userId,
+            },
+          },
           include: {
-            user: true,
+            user: {
+              select: {
+                name: true,
+                id: true,
+              },
+            },
           },
         },
       },
     });
-    const roomsId = chats.userRoom.map(({ roomId }) => {
-      return roomId;
+
+    const roomlist = getRooms.map(({ id, userRoom }) => {
+      let user = userRoom[0].user;
+      return {
+        roomId: id,
+        userId: user.id,
+        user,
+      };
     });
-    const chatList = await prisma.userRoom.findMany({
-      where: {
-        roomId: {
-          in: roomsId,
-        },
-        userId: {
-          not: userId,
-        },
-      },
-      include: { user: true },
-    });
-    return chatList;
+
+    return roomlist;
   } catch (error) {
     console.error({ error });
   }
@@ -97,6 +107,7 @@ io.on('connection', (socket) => {
 
   socket.on('send_message', async (data) => {
     await saveMessage(data);
+    console.log({ data });
     io.to(data.room).emit('receive_message', data);
   });
   socket.on('join_room', async (data) => {
@@ -108,6 +119,7 @@ io.on('connection', (socket) => {
   socket.on('ask_users', async (data) => {
     const userId = Number(data.userId);
     const rooms = await getChats(userId);
+    console.log(rooms);
     socket.emit('receive_users', { rooms });
   });
   socket.on('ask_room', async (data) => {});
